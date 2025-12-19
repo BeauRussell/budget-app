@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Account categories (user-customizable)
+model AccountCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  type      String    @default("ASSET") // "ASSET" or "DEBT"
+  isDefault Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  accounts  Account[]
+}
+
+// Asset or Debt
+model Account {
+  id          String          @id @default(cuid())
+  name        String
+  type        String           // "ASSET" or "DEBT"
+  categoryId  String
+  category    AccountCategory @relation(fields: [categoryId], references: [id])
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  snapshots   NetWorthSnapshot[]
+}
+
+// Monthly snapshot of account value
+model NetWorthSnapshot {
+  id        String   @id @default(cuid())
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [id])
+  value     Decimal
+  month     Int
+  year      Int
+  createdAt DateTime @default(now())
+  
+  @@unique([accountId, month, year])
+}
+
+// Budget category (user-customizable)
+model BudgetCategory {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  isActive  Boolean       @default(true)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  entries   BudgetEntry[]
+}
+
+// Monthly budget entry
+model BudgetEntry {
+  id         String         @id @default(cuid())
+  categoryId String
+  category   BudgetCategory @relation(fields: [categoryId], references: [id])
+  month      Int
+  year       Int
+  budgeted   Decimal
+  spent      Decimal        @default(0)
+  createdAt  DateTime       @default(now())
+  
+  @@unique([categoryId, month, year])
+}
+
+// Monthly income
+model MonthlyIncome {
+  id        String   @id @default(cuid())
+  month     Int
+  year      Int
+  amount    Decimal
+  note      String?
+  createdAt DateTime @default(now())
+  
+  @@unique([month, year])
+}
