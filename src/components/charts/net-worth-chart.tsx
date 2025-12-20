@@ -10,9 +10,10 @@ interface NetWorthChartProps {
     debts: number
     netWorth: number
   }>
+  onMonthClick?: (monthNum: number) => void
 }
 
-export function NetWorthChart({ data }: NetWorthChartProps) {
+export function NetWorthChart({ data, onMonthClick }: NetWorthChartProps) {
   const formatCurrency = (value: number | undefined) => {
     if (value === undefined) return '$0'
     return `$${value.toLocaleString()}`
@@ -20,7 +21,18 @@ export function NetWorthChart({ data }: NetWorthChartProps) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+      <LineChart 
+        data={data} 
+        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        onClick={(state: any) => {
+          if (state && state.activePayload && state.activePayload.length > 0 && onMonthClick) {
+            const monthNum = state.activePayload[0].payload.monthNum
+            onMonthClick(monthNum)
+          }
+        }}
+        className={onMonthClick ? "cursor-pointer" : ""}
+      >
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="month" />
         <YAxis tickFormatter={(value) => formatCurrency(value)} />
