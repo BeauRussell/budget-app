@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { LucideIcon, Home, TrendingUp, Wallet, Settings, Tag } from "lucide-react"
+import { LucideIcon, Home, TrendingUp, Wallet } from "lucide-react"
 
 interface NavItem {
   title: string
@@ -52,6 +52,10 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
           const isActive = pathname === item.href
+          const isExpanded = item.href === "/"
+            ? pathname === "/"
+            : pathname === item.href || pathname.startsWith(item.href + "/")
+
           return (
             <div key={item.href}>
               <Link
@@ -66,7 +70,7 @@ export function Sidebar() {
                 <item.icon className="h-5 w-5" />
                 {item.title}
               </Link>
-              {item.subItems && isActive && (
+              {item.subItems && isExpanded && (
                 <div className="ml-9 mt-1 space-y-1">
                   {item.subItems.map((subItem) => {
                     const isSubActive = pathname === subItem.href
