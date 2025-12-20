@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { format, addMonths, subMonths } from "date-fns"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
@@ -12,12 +11,14 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 interface MonthNavigatorProps {
   currentMonth: Date
   onMonthChange: (month: Date) => void
+  monthsWithData?: { month: number; year: number }[]
   className?: string
 }
 
 export function MonthNavigator({ 
   currentMonth, 
-  onMonthChange, 
+  onMonthChange,
+  monthsWithData = [],
   className 
 }: MonthNavigatorProps) {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false)
@@ -37,6 +38,16 @@ export function MonthNavigator({
       onMonthChange(date)
       setIsPopoverOpen(false)
     }
+  }
+
+  // Modifiers for the calendar
+  const modifiers = {
+    hasData: (date: Date) => {
+      // Only mark the first day of the month to keep it clean
+      return date.getDate() === 1 && monthsWithData.some(
+        (m) => m.month === date.getMonth() + 1 && m.year === date.getFullYear()
+      )
+    },
   }
 
   return (
@@ -61,7 +72,10 @@ export function MonthNavigator({
             mode="single"
             selected={currentMonth}
             onSelect={handleCalendarSelect}
-            initialFocus
+            modifiers={modifiers}
+            modifiersClassNames={{
+              hasData: "after:content-['•'] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:text-blue-500 after:text-lg"
+            }}
           />
         </PopoverContent>
       </Popover>

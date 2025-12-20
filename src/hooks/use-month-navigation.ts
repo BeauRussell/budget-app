@@ -1,14 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 
 export function useMonthNavigation(initialMonth?: Date) {
-  const [currentMonth, setCurrentMonth] = useState(
-    initialMonth || new Date()
-  )
-
-  // On mount, check URL for month parameter
-  useEffect(() => {
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    // Initialize from URL if possible
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
       const monthParam = urlParams.get('month')
@@ -16,11 +12,12 @@ export function useMonthNavigation(initialMonth?: Date) {
       if (monthParam) {
         const date = new Date(monthParam + '-01') // Add day to make valid date
         if (!isNaN(date.getTime())) {
-          setCurrentMonth(date)
+          return date
         }
       }
     }
-  }, [])
+    return initialMonth || new Date()
+  })
 
   // Whenever currentMonth changes, update URL
   const goToMonth = (month: Date) => {

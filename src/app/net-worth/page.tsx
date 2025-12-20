@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NetWorthChart } from "@/components/charts/net-worth-chart"
 import { format } from "date-fns"
 import { RefreshCw } from "lucide-react"
+import { useMonthNavigation } from "@/hooks/use-month-navigation"
+import { MonthNavigator } from "@/components/layout/month-navigator"
+import { YearNavigator } from "@/components/layout/year-navigator"
+import { toast } from "sonner"
 
 interface AccountEntry {
   id: string
@@ -29,19 +33,34 @@ interface TrendData {
   netWorth: number
 }
 
+interface SummaryData {
+  monthsWithData: { month: number; year: number }[]
+  years: number[]
+}
+
 export default function NetWorthEntryPage() {
-  const currentMonth = new Date()
+  const { currentMonth, goToMonth } = useMonthNavigation()
+  const [trendsYear, setTrendsYear] = useState(currentMonth.getFullYear())
+  const [activeTab, setActiveTab] = useState("entry")
   const [accounts, setAccounts] = useState<AccountEntry[]>([])
   const [trendData, setTrendData] = useState<TrendData[]>([])
+  const [summaryData, setSummaryData] = useState<SummaryData>({ monthsWithData: [], years: [] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchNetWorthData()
-    fetchTrendData()
+  const fetchSummaryData = useCallback(async () => {
+    try {
+      const response = await fetch('/api/net-worth/summary')
+      if (response.ok) {
+        const data = await response.json()
+        setSummaryData(data)
+      }
+    } catch (error) {
+      console.error('Error fetching summary data:', error)
+    }
   }, [])
 
-  const fetchNetWorthData = async () => {
+  const fetchNetWorthData = useCallback(async () => {
     setLoading(true)
     try {
       const month = currentMonth.getMonth() + 1
@@ -54,23 +73,36 @@ export default function NetWorthEntryPage() {
       }
     } catch (error) {
       console.error('Error fetching net worth data:', error)
+      toast.error('Failed to load net worth data')
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentMonth])
 
-  const fetchTrendData = async () => {
+  const fetchTrendData = useCallback(async () => {
     try {
-      const year = currentMonth.getFullYear()
-      const response = await fetch(`/api/net-worth/trends?year=${year}`)
+      const response = await fetch(`/api/net-worth/trends?year=${trendsYear}`)
       if (response.ok) {
         const data = await response.json()
         setTrendData(data)
       }
     } catch (error) {
       console.error('Error fetching trend data:', error)
+      toast.error('Failed to load trend data')
     }
-  }
+  }, [trendsYear])
+
+  useEffect(() => {
+    fetchSummaryData()
+  }, [fetchSummaryData])
+
+  useEffect(() => {
+    fetchNetWorthData()
+  }, [fetchNetWorthData])
+
+  useEffect(() => {
+    fetchTrendData()
+  }, [fetchTrendData])
 
   const handleValueChange = (accountId: string, value: string) => {
     setAccounts(prev => prev.map(account => 
@@ -103,18 +135,26 @@ export default function NetWorthEntryPage() {
 
       if (response.ok) {
         await fetchNetWorthData()
-        // TODO: Show success toast
+        await fetchSummaryData()
+        await fetchTrendData()
+        toast.success('Net worth snapshots saved successfully')
       } else {
         const error = await response.json()
         console.error('Error saving net worth:', error.error)
-        // TODO: Show error toast
+        toast.error('Failed to save net worth snapshots')
       }
     } catch (error) {
       console.error('Error saving net worth:', error)
-      // TODO: Show error toast
+      toast.error('An unexpected error occurred')
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleMonthClick = (monthNum: number) => {
+    const newDate = new Date(trendsYear, monthNum - 1, 1)
+    goToMonth(newDate)
+    setActiveTab("entry")
   }
 
   const assets = accounts.filter(a => a.type === 'ASSET')
@@ -132,8 +172,12 @@ export default function NetWorthEntryPage() {
 
   const netWorth = totalAssets - totalDebts
 
-  if (loading) {
-    return <div>Loading...</div>
+  if (loading && accounts.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
@@ -142,19 +186,34 @@ export default function NetWorthEntryPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Net Worth</h1>
           <p className="text-muted-foreground">
-            Track your assets and debts for {format(currentMonth, 'MMMM yyyy')}
+            Track your financial progress over time
           </p>
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${saving ? 'animate-spin' : ''}`} />
-          {saving ? 'Saving...' : 'Save All'}
-        </Button>
+        <div className="flex items-center gap-4">
+          {activeTab === "entry" ? (
+             <MonthNavigator 
+             currentMonth={currentMonth} 
+             onMonthChange={goToMonth} 
+             monthsWithData={summaryData.monthsWithData}
+           />
+          ) : (
+            <YearNavigator 
+              currentYear={trendsYear} 
+              onYearChange={setTrendsYear} 
+              availableYears={summaryData.years}
+            />
+          )}
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${saving ? 'animate-spin' : ''}`} />
+            {saving ? 'Saving...' : 'Save All'}
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="entry" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList>
           <TabsTrigger value="entry">Monthly Entry</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
@@ -162,6 +221,12 @@ export default function NetWorthEntryPage() {
 
         <TabsContent value="entry">
           <div className="space-y-6">
+            <div className="flex justify-between items-center bg-muted/50 p-4 rounded-lg">
+              <h2 className="text-lg font-semibold">
+                Entry for {format(currentMonth, 'MMMM yyyy')}
+              </h2>
+            </div>
+            
             <div className="grid gap-6 md:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -261,14 +326,14 @@ export default function NetWorthEntryPage() {
         <TabsContent value="trends">
           <Card>
             <CardHeader>
-              <CardTitle>Net Worth Trends - {currentMonth.getFullYear()}</CardTitle>
+              <CardTitle>Net Worth Trends - {trendsYear}</CardTitle>
             </CardHeader>
             <CardContent>
               {trendData.some(d => d.netWorth !== 0) ? (
-                <NetWorthChart data={trendData} />
+                <NetWorthChart data={trendData} onMonthClick={handleMonthClick} />
               ) : (
                 <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  No data yet. Add account values to see trends.
+                  No data yet for {trendsYear}. Add account values to see trends.
                 </div>
               )}
             </CardContent>
