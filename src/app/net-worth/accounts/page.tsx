@@ -238,7 +238,7 @@ export default function AccountsPage() {
                 <Select 
                   value={formData.type} 
                   onValueChange={(value: "ASSET" | "DEBT") => 
-                    setFormData({ ...formData, type: value })
+                    setFormData({ ...formData, type: value, categoryId: "" })
                   }
                 >
                   <SelectTrigger>
@@ -267,11 +267,13 @@ export default function AccountsPage() {
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
+                    {categories
+                      .filter((category) => category.type === formData.type)
+                      .map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
