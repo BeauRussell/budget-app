@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { format } from "date-fns"
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, DollarSign, CreditCard } from "lucide-react"
+import { TrendingUp, TrendingDown, PiggyBank, DollarSign, CreditCard } from "lucide-react"
 import Link from "next/link"
 
 interface DashboardData {
@@ -23,15 +23,11 @@ interface DashboardData {
 }
 
 export default function Dashboard() {
-  const currentMonth = new Date()
+  const currentMonth = useMemo(() => new Date(), [])
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [])
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const month = currentMonth.getMonth() + 1
       const year = currentMonth.getFullYear()
@@ -46,7 +42,11 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentMonth])
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
 
   if (loading) {
     return <div>Loading...</div>
