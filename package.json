@@ -10,6 +10,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "bun run prisma/seed.ts",
     "db:reset": "prisma migrate reset",
+    "clean": "rm -rf .next node_modules",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",

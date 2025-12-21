@@ -17,7 +17,7 @@ RUN bunx prisma generate
 ENV NODE_ENV=development
 
 EXPOSE 3000
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun run dev"]
+CMD ["sh", "-c", "bunx prisma@5.22.0 migrate deploy && bun run dev"]
 
 # ---- Build stage ----
 FROM base AS builder
@@ -32,10 +32,16 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy all files from builder stage to keep it simple
-COPY --from=builder /app ./
+# Copy standalone build and necessary files
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 
-# Run migrations and start the server
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun run start"]
+# Run migrations and start the server using the standalone build
+# We use bun to run the standalone server.js
+# Pinning prisma version to match package.json to avoid auto-update to v7
+CMD ["sh", "-c", "bunx prisma@5.22.0 migrate deploy && bun server.js"]
