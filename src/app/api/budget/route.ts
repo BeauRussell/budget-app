@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const month = parseInt(searchParams.get('month') || '')
     const year = parseInt(searchParams.get('year') || '')
 
+
     if (!month || !year) {
       return NextResponse.json(
         { error: 'Month and year are required' },

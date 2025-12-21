@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,19 +41,14 @@ interface TrendData {
 }
 
 export default function BudgetEntryPage() {
-  const currentMonth = new Date()
+  const currentMonth = useMemo(() => new Date(), [])
   const [entries, setEntries] = useState<BudgetEntry[]>([])
   const [income, setIncome] = useState<IncomeData>({ amount: null, note: null })
   const [trendData, setTrendData] = useState<TrendData[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchBudgetData()
-    fetchTrendData()
-  }, [])
-
-  const fetchBudgetData = async () => {
+  const fetchBudgetData = useCallback(async () => {
     setLoading(true)
     try {
       const month = currentMonth.getMonth() + 1
@@ -81,9 +76,9 @@ export default function BudgetEntryPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentMonth])
 
-  const fetchTrendData = async () => {
+  const fetchTrendData = useCallback(async () => {
     try {
       const year = currentMonth.getFullYear()
       const response = await fetch(`/api/budget/trends?year=${year}`)
@@ -94,7 +89,12 @@ export default function BudgetEntryPage() {
     } catch (error) {
       console.error('Error fetching trend data:', error)
     }
-  }
+  }, [currentMonth])
+
+  useEffect(() => {
+    fetchBudgetData()
+    fetchTrendData()
+  }, [fetchBudgetData, fetchTrendData])
 
   const handleBudgetedChange = (categoryId: string, value: string) => {
     setEntries(prev => prev.map(entry => 
