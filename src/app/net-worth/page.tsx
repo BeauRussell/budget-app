@@ -157,8 +157,8 @@ export default function NetWorthEntryPage() {
     setActiveTab("entry")
   }
 
-  const assets = accounts.filter(a => a.type === 'ASSET')
-  const debts = accounts.filter(a => a.type === 'DEBT')
+  const assets = accounts.filter(a => a.type === 'ASSET').sort((a,b) => a.category.localeCompare(b.category));
+  const debts = accounts.filter(a => a.type === 'DEBT').sort((a,b) => a.category.localeCompare(b.category));
 
   const totalAssets = assets.reduce((sum, a) => {
     const value = parseFloat(a.currentValue || '0')
