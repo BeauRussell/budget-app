@@ -21,6 +21,7 @@ import { RefreshCw } from "lucide-react"
 interface BudgetEntry {
   id: string
   name: string
+  type: string
   budgeted: string
   spent: string
   hasEntry: boolean
@@ -237,7 +238,23 @@ export default function BudgetEntryPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Budget Entries</CardTitle>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Budget Entries</CardTitle>
+                  <div className="flex gap-4 text-sm">
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                      <span>Needs: ${(entries.filter(e => e.type === 'NEED').reduce((sum, e) => sum + (parseFloat(e.spent) || 0), 0)).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                      <span>Wants: ${(entries.filter(e => e.type === 'WANT').reduce((sum, e) => sum + (parseFloat(e.spent) || 0), 0)).toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <span>Savings: ${(entries.filter(e => e.type === 'SAVING').reduce((sum, e) => sum + (parseFloat(e.spent) || 0), 0)).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 {entries.length === 0 ? (
@@ -245,54 +262,76 @@ export default function BudgetEntryPage() {
                     No categories found. <a href="/budget/categories" className="text-blue-600 hover:underline">Add some categories</a> to get started.
                   </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Budgeted</TableHead>
-                        <TableHead>Spent</TableHead>
-                        <TableHead>Remaining</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {entries.map((entry) => {
-                        const budgeted = parseFloat(entry.budgeted || '0') || 0
-                        const spent = parseFloat(entry.spent || '0') || 0
-                        const remaining = budgeted - spent
-                        
-                        return (
-                          <TableRow key={entry.id}>
-                            <TableCell className="font-medium">{entry.name}</TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={entry.budgeted}
-                                onChange={(e) => handleBudgetedChange(entry.id, e.target.value)}
-                                className="w-28"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="0.00"
-                                value={entry.spent}
-                                onChange={(e) => handleSpentChange(entry.id, e.target.value)}
-                                className="w-28"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <span className={remaining >= 0 ? 'text-green-700' : 'text-red-700'}>
-                                ${remaining.toLocaleString()}
-                              </span>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
+                  <div className="space-y-8">
+                    {['NEED', 'WANT', 'SAVING'].map((type) => {
+                      const typeEntries = entries.filter(e => e.type === type)
+                      if (typeEntries.length === 0) return null
+
+                      const typeBudgeted = typeEntries.reduce((sum, e) => sum + (parseFloat(e.budgeted) || 0), 0)
+                      const typeSpent = typeEntries.reduce((sum, e) => sum + (parseFloat(e.spent) || 0), 0)
+
+                      return (
+                        <div key={type} className="space-y-3">
+                          <div className="flex justify-between items-end border-b pb-1">
+                            <h3 className="text-lg font-semibold capitalize">
+                              {type.toLowerCase()}s
+                            </h3>
+                            <div className="text-sm text-muted-foreground">
+                              Budgeted: ${typeBudgeted.toLocaleString()} | Spent: ${typeSpent.toLocaleString()}
+                            </div>
+                          </div>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Category</TableHead>
+                                <TableHead>Budgeted</TableHead>
+                                <TableHead>Spent</TableHead>
+                                <TableHead>Remaining</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {typeEntries.map((entry) => {
+                                const budgeted = parseFloat(entry.budgeted || '0') || 0
+                                const spent = parseFloat(entry.spent || '0') || 0
+                                const remaining = budgeted - spent
+                                
+                                return (
+                                  <TableRow key={entry.id}>
+                                    <TableCell className="font-medium">{entry.name}</TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={entry.budgeted}
+                                        onChange={(e) => handleBudgetedChange(entry.id, e.target.value)}
+                                        className="w-28"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={entry.spent}
+                                        onChange={(e) => handleSpentChange(entry.id, e.target.value)}
+                                        className="w-28"
+                                      />
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className={remaining >= 0 ? 'text-green-700' : 'text-red-700'}>
+                                        ${remaining.toLocaleString()}
+                                      </span>
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>

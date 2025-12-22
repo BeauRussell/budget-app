@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
       return {
         id: category.id,
         name: category.name,
+        type: category.type,
         budgeted: currentEntry?.budgeted?.toString() || prevEntry?.budgeted?.toString() || '',
         spent: currentEntry?.spent?.toString() || '0',
         hasEntry: !!currentEntry

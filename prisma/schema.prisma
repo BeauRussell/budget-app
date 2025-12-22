@@ -42,6 +42,7 @@ model NetWorthSnapshot {
 model BudgetCategory {
   id        String        @id @default(cuid())
   name      String        @unique
+  type      String        @default("WANT")
   isActive  Boolean       @default(true)
   sortOrder Int           @default(0)
   createdAt DateTime      @default(now())
