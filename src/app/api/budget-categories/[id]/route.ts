@@ -12,9 +12,9 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { name, isActive } = body
+    const { name, isActive, type } = body
 
-    const updateData: { name?: string; isActive?: boolean } = {}
+    const updateData: { name?: string; isActive?: boolean; type?: string } = {}
     
     if (name !== undefined) {
       if (name.trim() === '') {
@@ -28,6 +28,18 @@ export async function PUT(
     
     if (typeof isActive === 'boolean') {
       updateData.isActive = isActive
+    }
+
+    if (type !== undefined) {
+      const validTypes = ['NEED', 'WANT', 'SAVING']
+      if (validTypes.includes(type)) {
+        updateData.type = type
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid type. Must be NEED, WANT, or SAVING' },
+          { status: 400 }
+        )
+      }
     }
 
     const category = await prisma.budgetCategory.update({

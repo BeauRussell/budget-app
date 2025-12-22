@@ -43,13 +43,28 @@ export async function GET(request: NextRequest) {
 
     // Get budget data
     const budgetEntries = await prisma.budgetEntry.findMany({
-      where: { month, year }
+      where: { month, year },
+      include: {
+        category: true
+      }
     })
 
     const totalBudgeted = budgetEntries.reduce((sum, e) => 
       sum + parseFloat(e.budgeted.toString()), 0)
     const totalSpent = budgetEntries.reduce((sum, e) => 
       sum + parseFloat(e.spent.toString()), 0)
+
+    const needsSpent = budgetEntries
+      .filter(e => e.category.type === 'NEED')
+      .reduce((sum, e) => sum + parseFloat(e.spent.toString()), 0)
+    
+    const wantsSpent = budgetEntries
+      .filter(e => e.category.type === 'WANT')
+      .reduce((sum, e) => sum + parseFloat(e.spent.toString()), 0)
+    
+    const savingsSpent = budgetEntries
+      .filter(e => e.category.type === 'SAVING')
+      .reduce((sum, e) => sum + parseFloat(e.spent.toString()), 0)
 
     // Get income
     const income = await prisma.monthlyIncome.findUnique({
@@ -73,7 +88,12 @@ export async function GET(request: NextRequest) {
         totalSpent,
         plannedSavings,
         actualSavings,
-        savingsRate
+        savingsRate,
+        breakdown: {
+          needs: needsSpent,
+          wants: wantsSpent,
+          savings: savingsSpent
+        }
       }
     })
   } catch (error) {

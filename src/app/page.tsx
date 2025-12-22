@@ -12,15 +12,20 @@ interface DashboardData {
     totalDebts: number
     netWorth: number
   }
-  budget: {
-    income: number
-    totalBudgeted: number
-    totalSpent: number
-    plannedSavings: number
-    actualSavings: number
-    savingsRate: number
+    budget: {
+      income: number
+      totalBudgeted: number
+      totalSpent: number
+      plannedSavings: number
+      actualSavings: number
+      savingsRate: number
+      breakdown?: {
+        needs: number
+        wants: number
+        savings: number
+      }
+    }
   }
-}
 
 export default function Dashboard() {
   const currentMonth = useMemo(() => new Date(), [])
@@ -187,6 +192,22 @@ export default function Dashboard() {
                   ${(data?.budget.totalSpent || 0).toLocaleString()}
                 </span>
               </div>
+              {data?.budget.breakdown && (
+                <div className="pl-4 space-y-1 text-sm text-muted-foreground">
+                  <div className="flex justify-between">
+                    <span>• Needs</span>
+                    <span>${data.budget.breakdown.needs.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>• Wants</span>
+                    <span>${data.budget.breakdown.wants.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>• Savings</span>
+                    <span>${data.budget.breakdown.savings.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
               <div className="border-t pt-4 flex items-center justify-between">
                 <span className="font-semibold">Planned Savings</span>
                 <span className={`font-bold ${(data?.budget.plannedSavings || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>

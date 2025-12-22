@@ -13,7 +13,15 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog"
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+
 import { 
   Table,
   TableBody,
@@ -27,6 +35,7 @@ import { Plus, Edit, Trash2, ArrowUp, ArrowDown } from "lucide-react"
 interface BudgetCategory {
   id: string
   name: string
+  type: string
   isActive: boolean
   sortOrder: number
   _count: {
@@ -39,7 +48,7 @@ export default function BudgetCategoriesPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<BudgetCategory | null>(null)
-  const [formData, setFormData] = useState({ name: "" })
+  const [formData, setFormData] = useState({ name: "", type: "WANT" })
 
   useEffect(() => {
     fetchCategories()
@@ -74,13 +83,16 @@ export default function BudgetCategoriesPage() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: formData.name.trim() })
+        body: JSON.stringify({ 
+          name: formData.name.trim(),
+          type: formData.type
+        })
       })
 
       if (response.ok) {
         await fetchCategories()
         setDialogOpen(false)
-        setFormData({ name: "" })
+        setFormData({ name: "", type: "WANT" })
         setEditingCategory(null)
       } else {
         const error = await response.json()
@@ -93,7 +105,7 @@ export default function BudgetCategoriesPage() {
 
   const handleEdit = (category: BudgetCategory) => {
     setEditingCategory(category)
-    setFormData({ name: category.name })
+    setFormData({ name: category.name, type: category.type })
     setDialogOpen(true)
   }
 
@@ -160,12 +172,25 @@ export default function BudgetCategoriesPage() {
 
   const openDialog = () => {
     setEditingCategory(null)
-    setFormData({ name: "" })
+    setFormData({ name: "", type: "WANT" })
     setDialogOpen(true)
   }
 
   if (loading) {
     return <div>Loading...</div>
+  }
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case 'NEED':
+        return <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-blue-200">Need</Badge>
+      case 'WANT':
+        return <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-orange-200">Want</Badge>
+      case 'SAVING':
+        return <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200">Saving</Badge>
+      default:
+        return <Badge variant="outline">{type}</Badge>
+    }
   }
 
   return (
@@ -174,7 +199,7 @@ export default function BudgetCategoriesPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Budget Categories</h1>
           <p className="text-muted-foreground">
-            Manage your budget categories
+            Manage your budget categories and group them by needs, wants, and savings
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -191,15 +216,31 @@ export default function BudgetCategoriesPage() {
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="name">Category Name</Label>
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData({ name: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Enter category name"
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="type">Category Type</Label>
+                <Select 
+                  value={formData.type} 
+                  onValueChange={(value) => setFormData({ ...formData, type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NEED">Need</SelectItem>
+                    <SelectItem value="WANT">Want</SelectItem>
+                    <SelectItem value="SAVING">Saving</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <Button type="submit" className="w-full">
                 {editingCategory ? 'Update' : 'Create'} Category
@@ -219,6 +260,7 @@ export default function BudgetCategoriesPage() {
               <TableRow>
                 <TableHead className="w-12">Order</TableHead>
                 <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Entries</TableHead>
                 <TableHead>Active</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -250,6 +292,7 @@ export default function BudgetCategoriesPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">{category.name}</TableCell>
+                  <TableCell>{getTypeBadge(category.type)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">
                       {category._count.entries} entries

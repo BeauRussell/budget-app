@@ -29,7 +29,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name } = body
+    const { name, type } = body
 
     if (!name || name.trim() === '') {
       return NextResponse.json(
@@ -37,6 +37,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const validTypes = ['NEED', 'WANT', 'SAVING']
+    const categoryType = type && validTypes.includes(type) ? type : 'WANT'
 
     // Get the max sort order
     const maxSortOrder = await prisma.budgetCategory.findFirst({
@@ -47,6 +50,7 @@ export async function POST(request: NextRequest) {
     const category = await prisma.budgetCategory.create({
       data: {
         name: name.trim(),
+        type: categoryType,
         sortOrder: (maxSortOrder?.sortOrder || 0) + 1
       },
       include: {
