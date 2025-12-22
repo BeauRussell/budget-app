@@ -324,20 +324,46 @@ export default function NetWorthEntryPage() {
         </TabsContent>
 
         <TabsContent value="trends">
-          <Card>
-            <CardHeader>
-              <CardTitle>Net Worth Trends - {trendsYear}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {trendData.some(d => d.netWorth !== 0) ? (
-                <NetWorthChart data={trendData} onMonthClick={handleMonthClick} />
-              ) : (
-                <div className="h-64 flex items-center justify-center text-muted-foreground">
-                  No data yet for {trendsYear}. Add account values to see trends.
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Net Worth Trend - {trendsYear}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {trendData.some(d => d.netWorth !== 0) ? (
+                  <NetWorthChart 
+                    data={trendData} 
+                    onMonthClick={handleMonthClick} 
+                    showAssets={false} 
+                    showDebts={false} 
+                  />
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                    No data yet for {trendsYear}. Add account values to see trends.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Assets & Debts Trend - {trendsYear}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {trendData.some(d => d.netWorth !== 0) ? (
+                  <NetWorthChart 
+                    data={trendData} 
+                    onMonthClick={handleMonthClick} 
+                    showNetWorth={false} 
+                  />
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                    No data yet for {trendsYear}. Add account values to see trends.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

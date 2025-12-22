@@ -11,9 +11,18 @@ interface NetWorthChartProps {
     netWorth: number
   }>
   onMonthClick?: (monthNum: number) => void
+  showAssets?: boolean
+  showDebts?: boolean
+  showNetWorth?: boolean
 }
 
-export function NetWorthChart({ data, onMonthClick }: NetWorthChartProps) {
+export function NetWorthChart({ 
+  data, 
+  onMonthClick,
+  showAssets = true,
+  showDebts = true,
+  showNetWorth = true
+}: NetWorthChartProps) {
   const formatCurrency = (value: number | undefined) => {
     if (value === undefined) return '$0'
     return `$${value.toLocaleString()}`
@@ -38,27 +47,33 @@ export function NetWorthChart({ data, onMonthClick }: NetWorthChartProps) {
         <YAxis tickFormatter={(value) => formatCurrency(value)} />
         <Tooltip formatter={(value) => formatCurrency(value as number)} />
         <Legend />
-        <Line 
-          type="monotone" 
-          dataKey="assets" 
-          stroke="#22c55e" 
-          strokeWidth={2}
-          name="Assets"
-        />
-        <Line 
-          type="monotone" 
-          dataKey="debts" 
-          stroke="#ef4444" 
-          strokeWidth={2}
-          name="Debts"
-        />
-        <Line 
-          type="monotone" 
-          dataKey="netWorth" 
-          stroke="#3b82f6" 
-          strokeWidth={3}
-          name="Net Worth"
-        />
+        {showAssets && (
+          <Line 
+            type="monotone" 
+            dataKey="assets" 
+            stroke="#22c55e" 
+            strokeWidth={2}
+            name="Assets"
+          />
+        )}
+        {showDebts && (
+          <Line 
+            type="monotone" 
+            dataKey="debts" 
+            stroke="#ef4444" 
+            strokeWidth={2}
+            name="Debts"
+          />
+        )}
+        {showNetWorth && (
+          <Line 
+            type="monotone" 
+            dataKey="netWorth" 
+            stroke="#3b82f6" 
+            strokeWidth={3}
+            name="Net Worth"
+          />
+        )}
       </LineChart>
     </ResponsiveContainer>
   )
