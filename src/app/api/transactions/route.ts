@@ -20,7 +20,11 @@ export async function GET(request: NextRequest) {
     const startDate = startOfMonth(new Date(year, month - 1))
     const endDate = endOfMonth(new Date(year, month - 1))
 
-    const where: any = {
+    const where: {
+      date: { gte: Date; lte: Date };
+      categoryId?: string;
+      OR?: Array<{ vendor?: { contains: string; mode: 'insensitive' }; description?: { contains: string; mode: 'insensitive' } }>;
+    } = {
       date: {
         gte: startDate,
         lte: endDate,
@@ -38,7 +42,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const transactions = await (prisma as any).transaction.findMany({
+    const transactions = await prisma.transaction.findMany({
       where,
       include: {
         category: true,
@@ -70,7 +74,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const transaction = await (prisma as any).transaction.create({
+    const transaction = await prisma.transaction.create({
       data: {
         date: new Date(date),
         amount: parseFloat(amount),

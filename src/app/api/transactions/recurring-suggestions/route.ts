@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { subMonths, startOfMonth, endOfMonth, setDate } from 'date-fns'
+import { subMonths, startOfMonth, endOfMonth } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const lookbackStart = startOfMonth(subMonths(currentMonthStart, 3))
     const lookbackEnd = endOfMonth(subMonths(currentMonthStart, 1))
 
-    const recurringTransactions = await (prisma as any).transaction.findMany({
+    const recurringTransactions = await prisma.transaction.findMany({
       where: {
         isRecurring: true,
         date: {
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Get current month's transactions to avoid duplicates
-    const currentTransactions = await (prisma as any).transaction.findMany({
+    const currentTransactions = await prisma.transaction.findMany({
       where: {
         date: {
           gte: currentMonthStart,
@@ -42,26 +42,29 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const suggestions: any[] = []
+    const suggestions = []
     const seenGroup = new Set() // Unique by category + vendor + day
 
     for (const tx of recurringTransactions) {
-      const txDay = new Date(tx.date).getDate()
+      const txDate = new Date(tx.date)
+      const txDay = txDate.getUTCDate()
       const groupKey = `${tx.categoryId}-${tx.vendor}-${txDay}`
 
       if (seenGroup.has(groupKey)) continue
       
       // Check if already exists in current month
-      const alreadyExists = currentTransactions.some((curr: any) => 
+      const alreadyExists = currentTransactions.some((curr: { categoryId: string; vendor: string | null; date: Date | string }) => 
         curr.categoryId === tx.categoryId && 
         curr.vendor === tx.vendor && 
-        new Date(curr.date).getDate() === txDay
+        new Date(curr.date).getUTCDate() === txDay
       )
 
       if (!alreadyExists) {
+        // Use noon UTC to avoid timezone shifts during display in the browser
+        const suggestedDate = new Date(Date.UTC(year, month - 1, txDay, 12, 0, 0))
         suggestions.push({
           originalTransaction: tx,
-          suggestedDate: setDate(currentMonthStart, txDay).toISOString()
+          suggestedDate: suggestedDate.toISOString()
         })
         seenGroup.add(groupKey)
       }
