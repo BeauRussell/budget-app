@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { startOfMonth, endOfMonth } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const month = parseInt(searchParams.get('month') || '')
     const year = parseInt(searchParams.get('year') || '')
-
 
     if (!month || !year) {
       return NextResponse.json(
@@ -30,9 +30,27 @@ export async function GET(request: NextRequest) {
       ]
     })
 
-    // Get previous month's entries to use as defaults
-    const prevMonth = month === 1 ? 12 : month - 1
-    const prevYear = month === 1 ? year - 1 : year
+    // Compute spent amounts from transactions
+    const startDate = startOfMonth(new Date(year, month - 1))
+    const endDate = endOfMonth(new Date(year, month - 1))
+
+    const transactionTotals = await (prisma as any).transaction.groupBy({
+      by: ['categoryId'],
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      _sum: {
+        amount: true
+      }
+    })
+
+    // Get previous month's entries to use as defaults for budgeted amounts
+    const prevDate = startOfMonth(new Date(year, month - 2))
+    const prevMonth = prevDate.getMonth() + 1
+    const prevYear = prevDate.getFullYear()
 
     const prevEntries = await prisma.budgetEntry.findMany({
       where: { month: prevMonth, year: prevYear }
@@ -42,13 +60,14 @@ export async function GET(request: NextRequest) {
     const formatted = categories.map(category => {
       const currentEntry = category.entries[0]
       const prevEntry = prevEntries.find(e => e.categoryId === category.id)
+      const spentTotal = transactionTotals.find((t: any) => t.categoryId === category.id)?._sum?.amount || 0
       
       return {
         id: category.id,
         name: category.name,
         type: category.type,
         budgeted: currentEntry?.budgeted?.toString() || prevEntry?.budgeted?.toString() || '',
-        spent: currentEntry?.spent?.toString() || '0',
+        spent: spentTotal.toString(),
         hasEntry: !!currentEntry
       }
     })
@@ -87,7 +106,7 @@ export async function POST(request: NextRequest) {
       const results = []
 
       for (const entry of entries) {
-        const { categoryId, budgeted, spent } = entry
+        const { categoryId, budgeted } = entry
 
         if (!categoryId) {
           throw new Error('Category ID is required for all entries')
@@ -105,7 +124,7 @@ export async function POST(request: NextRequest) {
 
         const data = {
           budgeted: parseFloat(budgeted) || 0,
-          spent: parseFloat(spent) || 0
+          // spent is no longer stored here as it is computed from transactions
         }
 
         if (existing) {

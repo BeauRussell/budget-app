@@ -34,6 +34,7 @@ const navItems: NavItem[] = [
     icon: Wallet,
     subItems: [
       { title: "Overview", href: "/budget" },
+      { title: "Transactions", href: "/budget/transactions" },
       { title: "Categories", href: "/budget/categories" },
     ]
   },
