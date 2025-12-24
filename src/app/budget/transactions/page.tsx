@@ -31,7 +31,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
 import {
@@ -59,6 +58,7 @@ interface Category {
   id: string
   name: string
   type: string
+  isActive?: boolean
 }
 
 interface Transaction {
@@ -134,8 +134,8 @@ function TransactionsContent() {
     try {
       const response = await fetch("/api/budget-categories")
       if (response.ok) {
-        const data = await response.json()
-        setCategories(data.filter((c: any) => c.isActive))
+        const data: Category[] = await response.json()
+        setCategories(data.filter((c) => c.isActive))
       }
     } catch (error) {
       console.error("Error fetching categories:", error)
@@ -175,7 +175,7 @@ function TransactionsContent() {
       setEditingTransaction(transaction)
       setFormData({
         date: parseISO(transaction.date),
-        amount: transaction.amount,
+        amount: parseFloat(transaction.amount).toFixed(2),
         vendor: transaction.vendor || "",
         description: transaction.description || "",
         categoryId: transaction.categoryId,
@@ -487,6 +487,16 @@ function TransactionsContent() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="vendor">Vendor</Label>
+                <Input
+                  id="vendor"
+                  placeholder="Where did you spend or earn?"
+                  value={formData.vendor}
+                  onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">

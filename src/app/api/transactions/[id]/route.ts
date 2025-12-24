@@ -11,7 +11,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    const transaction = await (prisma as any).transaction.findUnique({
+    const transaction = await prisma.transaction.findUnique({
       where: { id },
       include: { category: true }
     })
@@ -42,7 +42,14 @@ export async function PUT(
     const body = await request.json()
     const { date, amount, vendor, description, categoryId, isRecurring } = body
 
-    const updateData: any = {}
+    const updateData: {
+      date?: Date;
+      amount?: number;
+      vendor?: string | null;
+      description?: string | null;
+      categoryId?: string;
+      isRecurring?: boolean;
+    } = {}
     if (date) updateData.date = new Date(date)
     if (amount !== undefined) updateData.amount = parseFloat(amount)
     if (vendor !== undefined) updateData.vendor = vendor
@@ -50,7 +57,7 @@ export async function PUT(
     if (categoryId) updateData.categoryId = categoryId
     if (isRecurring !== undefined) updateData.isRecurring = !!isRecurring
 
-    const transaction = await (prisma as any).transaction.update({
+    const transaction = await prisma.transaction.update({
       where: { id },
       data: updateData,
       include: { category: true }
@@ -72,7 +79,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await (prisma as any).transaction.delete({
+    await prisma.transaction.delete({
       where: { id }
     })
 

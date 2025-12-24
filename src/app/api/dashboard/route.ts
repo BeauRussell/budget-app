@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { startOfMonth, endOfMonth } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     const netWorth = totalAssets - totalDebts
 
-    // Get budget data
+    // Get budget entries and compute spent amounts from transactions
     const budgetEntries = await prisma.budgetEntry.findMany({
       where: { month, year },
       include: {
@@ -49,22 +50,50 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    const startDate = startOfMonth(new Date(year, month - 1))
+    const endDate = endOfMonth(new Date(year, month - 1))
+
+    const transactionTotals = await prisma.transaction.groupBy({
+      by: ['categoryId'],
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      _sum: {
+        amount: true
+      }
+    })
+
     const totalBudgeted = budgetEntries.reduce((sum, e) => 
       sum + parseFloat(e.budgeted.toString()), 0)
-    const totalSpent = budgetEntries.reduce((sum, e) => 
-      sum + parseFloat(e.spent.toString()), 0)
+    
+    // Instead of using e.spent, which is no longer updated, 
+    // we use the transaction totals.
+    const totalSpent = transactionTotals.reduce((sum, t) => 
+      sum + (t._sum.amount ? parseFloat(t._sum.amount.toString()) : 0), 0)
 
     const needsSpent = budgetEntries
       .filter(e => e.category.type === 'NEED')
-      .reduce((sum, e) => sum + parseFloat(e.spent.toString()), 0)
+      .reduce((sum, e) => {
+        const spent = transactionTotals.find(t => t.categoryId === e.categoryId)?._sum.amount || 0
+        return sum + parseFloat(spent.toString())
+      }, 0)
     
     const wantsSpent = budgetEntries
       .filter(e => e.category.type === 'WANT')
-      .reduce((sum, e) => sum + parseFloat(e.spent.toString()), 0)
+      .reduce((sum, e) => {
+        const spent = transactionTotals.find(t => t.categoryId === e.categoryId)?._sum.amount || 0
+        return sum + parseFloat(spent.toString())
+      }, 0)
     
     const savingsSpent = budgetEntries
       .filter(e => e.category.type === 'SAVING')
-      .reduce((sum, e) => sum + parseFloat(e.spent.toString()), 0)
+      .reduce((sum, e) => {
+        const spent = transactionTotals.find(t => t.categoryId === e.categoryId)?._sum.amount || 0
+        return sum + parseFloat(spent.toString())
+      }, 0)
 
     // Get income
     const income = await prisma.monthlyIncome.findUnique({
