@@ -16,7 +16,8 @@ import {
 } from "@/components/ui/table"
 import { BudgetChart, SavingsChart } from "@/components/charts/budget-chart"
 import { format } from "date-fns"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, ArrowRight } from "lucide-react"
+import Link from "next/link"
 
 interface BudgetEntry {
   id: string
@@ -101,14 +102,6 @@ export default function BudgetEntryPage() {
     setEntries(prev => prev.map(entry => 
       entry.id === categoryId 
         ? { ...entry, budgeted: value }
-        : entry
-    ))
-  }
-
-  const handleSpentChange = (categoryId: string, value: string) => {
-    setEntries(prev => prev.map(entry => 
-      entry.id === categoryId 
-        ? { ...entry, spent: value }
         : entry
     ))
   }
@@ -309,14 +302,18 @@ export default function BudgetEntryPage() {
                                       />
                                     </TableCell>
                                     <TableCell>
-                                      <Input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={entry.spent}
-                                        onChange={(e) => handleSpentChange(entry.id, e.target.value)}
-                                        className="w-28"
-                                      />
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-medium w-28">
+                                          ${spent.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <Link 
+                                          href={`/budget/transactions?category=${entry.id}`}
+                                          className="text-muted-foreground hover:text-primary transition-colors"
+                                          title="View transactions"
+                                        >
+                                          <ArrowRight className="h-4 w-4" />
+                                        </Link>
+                                      </div>
                                     </TableCell>
                                     <TableCell>
                                       <span className={remaining >= 0 ? 'text-green-700' : 'text-red-700'}>

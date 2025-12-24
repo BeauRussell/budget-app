@@ -84,14 +84,19 @@ export async function DELETE(
   try {
     const { id } = await params
 
-    // Check if category has any entries
-    const entryCount = await prisma.budgetEntry.count({
-      where: { categoryId: id }
-    })
+    // Check if category has any entries or transactions
+    const [entryCount, transactionCount] = await Promise.all([
+      prisma.budgetEntry.count({
+        where: { categoryId: id }
+      }),
+      (prisma as any).transaction.count({
+        where: { categoryId: id }
+      })
+    ])
 
-    if (entryCount > 0) {
+    if (entryCount > 0 || transactionCount > 0) {
       return NextResponse.json(
-        { error: 'Cannot delete category with existing budget entries. Deactivate it instead.' },
+        { error: 'Cannot delete category with existing budget entries or transactions. Deactivate it instead.' },
         { status: 400 }
       )
     }
