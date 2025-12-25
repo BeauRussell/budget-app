@@ -14,7 +14,6 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
 import { 
   Table,
   TableBody,
@@ -23,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Edit, Trash2 } from "lucide-react"
 
 interface Account {
@@ -190,6 +190,69 @@ export default function AccountsPage() {
     setDialogOpen(true)
   }
 
+  const renderAccountTable = (filteredAccounts: Account[]) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Name</TableHead>
+          <TableHead>Category</TableHead>
+          <TableHead>Latest Value</TableHead>
+          <TableHead>Active</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {filteredAccounts.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+              No accounts found
+            </TableCell>
+          </TableRow>
+        ) : (
+          filteredAccounts.map((account) => (
+            <TableRow key={account.id}>
+              <TableCell className="font-medium">{account.name}</TableCell>
+              <TableCell>{account.category.name}</TableCell>
+              <TableCell>
+                {latestValue(account) !== null
+                  ? `$${latestValue(account)?.toLocaleString()}` 
+                  : 'Not set'
+                }
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    checked={account.isActive}
+                    onCheckedChange={() => handleToggleActive(account)}
+                  />
+                  {account.isActive ? 'Active' : 'Inactive'}
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(account)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(account.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))
+        )}
+      </TableBody>
+    </Table>
+  )
+
   if (loading) {
     return <div>Loading...</div>
   }
@@ -285,71 +348,25 @@ export default function AccountsPage() {
         </Dialog>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Accounts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Latest Value</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {accounts.map((account) => (
-                <TableRow key={account.id}>
-                  <TableCell className="font-medium">{account.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={account.type === 'ASSET' ? 'default' : 'destructive'}>
-                      {account.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{account.category.name}</TableCell>
-                  <TableCell>
-                    {latestValue(account) 
-                      ? `$${latestValue(account)?.toLocaleString()}` 
-                      : 'Not set'
-                    }
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Checkbox 
-                        checked={account.isActive}
-                        onCheckedChange={() => handleToggleActive(account)}
-                      />
-                      {account.isActive ? 'Active' : 'Inactive'}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(account)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(account.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="ASSET" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-[400px]">
+          <TabsTrigger value="ASSET">Assets</TabsTrigger>
+          <TabsTrigger value="DEBT">Debts</TabsTrigger>
+        </TabsList>
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Accounts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TabsContent value="ASSET" className="mt-0">
+              {renderAccountTable(accounts.filter(a => a.type === 'ASSET'))}
+            </TabsContent>
+            <TabsContent value="DEBT" className="mt-0">
+              {renderAccountTable(accounts.filter(a => a.type === 'DEBT'))}
+            </TabsContent>
+          </CardContent>
+        </Card>
+      </Tabs>
     </div>
   )
 }
