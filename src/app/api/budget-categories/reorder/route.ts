@@ -1,34 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { pipe } from 'fp-ts/function'
+import * as TE from 'fp-ts/TaskEither'
+import * as E from 'fp-ts/Either'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseJsonBody, parseBody, tryCatchDb, toResponse } from '@/lib/result'
+import { reorderBudgetCategoriesBody } from '@/lib/schemas'
 
 export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { orderedIds } = body
-
-    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
-      return NextResponse.json(
-        { error: 'orderedIds must be a non-empty array' },
-        { status: 400 }
+  return pipe(
+    parseJsonBody(request),
+    TE.chain((body) => TE.fromEither(parseBody(reorderBudgetCategoriesBody)(body))),
+    TE.chain((validated) =>
+      tryCatchDb(
+        () => prisma.$transaction(
+          validated.orderedIds.map((catId, index) =>
+            prisma.budgetCategory.update({
+              where: { id: catId },
+              data: { sortOrder: index + 1 }
+            })
+          )
+        )
       )
-    }
-
-    // Update all categories in a transaction
-    await prisma.$transaction(
-      orderedIds.map((id: string, index: number) =>
-        prisma.budgetCategory.update({
-          where: { id },
-          data: { sortOrder: index + 1 }
-        })
-      )
-    )
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Error reordering budget categories:', error)
-    return NextResponse.json(
-      { error: 'Failed to reorder budget categories' },
-      { status: 500 }
-    )
-  }
+    ),
+    TE.map(() => ({ success: true })),
+    (te) => toResponse(te)
+  )
 }

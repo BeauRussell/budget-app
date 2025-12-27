@@ -1,165 +1,154 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { pipe } from 'fp-ts/function'
+import * as TE from 'fp-ts/TaskEither'
+import * as E from 'fp-ts/Either'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseQuery, parseBody, tryCatchDb, toResponse } from '@/lib/result'
+import { monthYearQuery, saveBudgetEntriesBody } from '@/lib/schemas'
 import { startOfMonth, endOfMonth } from 'date-fns'
+import { ValidationError, DatabaseError } from '@/lib/errors'
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const month = parseInt(searchParams.get('month') || '')
-    const year = parseInt(searchParams.get('year') || '')
+  return pipe(
+    E.right(new URL(request.url)),
+    E.chain((url) => parseQuery(monthYearQuery)(url.searchParams)),
+    TE.fromEither,
+    TE.chain(({ month, year }) =>
+      tryCatchDb(
+        async () => {
+          const categories = await prisma.budgetCategory.findMany({
+            where: { isActive: true },
+            include: {
+              entries: {
+                where: { month, year },
+                take: 1
+              }
+            },
+            orderBy: [
+              { sortOrder: 'asc' },
+              { name: 'asc' }
+            ]
+          })
 
-    if (!month || !year) {
-      return NextResponse.json(
-        { error: 'Month and year are required' },
-        { status: 400 }
+          const startDate = startOfMonth(new Date(year, month - 1))
+          const endDate = endOfMonth(new Date(year, month - 1))
+
+          const transactionTotals = await (prisma as any).transaction.groupBy({
+            by: ['categoryId'],
+            where: {
+              date: {
+                gte: startDate,
+                lte: endDate
+              }
+            },
+            _sum: {
+              amount: true
+            }
+          })
+
+          const prevDate = startOfMonth(new Date(year, month - 2))
+          const prevMonth = prevDate.getMonth() + 1
+          const prevYear = prevDate.getFullYear()
+
+          const prevEntries = await prisma.budgetEntry.findMany({
+            where: { month: prevMonth, year: prevYear }
+          })
+
+          const formatted = categories.map(category => {
+            const currentEntry = category.entries[0]
+            const prevEntry = prevEntries.find(e => e.categoryId === category.id)
+            const spentTotal = transactionTotals.find((t: any) => t.categoryId === category.id)?._sum?.amount || 0
+
+            return {
+              id: category.id,
+              name: category.name,
+              type: category.type,
+              budgeted: currentEntry?.budgeted?.toString() || prevEntry?.budgeted?.toString() || '',
+              spent: spentTotal.toString(),
+              hasEntry: !!currentEntry
+            }
+          })
+
+          return formatted
+        }
       )
-    }
-
-    // Get active budget categories with their entries for the month
-    const categories = await prisma.budgetCategory.findMany({
-      where: { isActive: true },
-      include: {
-        entries: {
-          where: { month, year },
-          take: 1
-        }
-      },
-      orderBy: [
-        { sortOrder: 'asc' },
-        { name: 'asc' }
-      ]
-    })
-
-    // Compute spent amounts from transactions
-    const startDate = startOfMonth(new Date(year, month - 1))
-    const endDate = endOfMonth(new Date(year, month - 1))
-
-    const transactionTotals = await (prisma as any).transaction.groupBy({
-      by: ['categoryId'],
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate
-        }
-      },
-      _sum: {
-        amount: true
-      }
-    })
-
-    // Get previous month's entries to use as defaults for budgeted amounts
-    const prevDate = startOfMonth(new Date(year, month - 2))
-    const prevMonth = prevDate.getMonth() + 1
-    const prevYear = prevDate.getFullYear()
-
-    const prevEntries = await prisma.budgetEntry.findMany({
-      where: { month: prevMonth, year: prevYear }
-    })
-
-    // Format the data for the frontend
-    const formatted = categories.map(category => {
-      const currentEntry = category.entries[0]
-      const prevEntry = prevEntries.find(e => e.categoryId === category.id)
-      const spentTotal = transactionTotals.find((t: any) => t.categoryId === category.id)?._sum?.amount || 0
-      
-      return {
-        id: category.id,
-        name: category.name,
-        type: category.type,
-        budgeted: currentEntry?.budgeted?.toString() || prevEntry?.budgeted?.toString() || '',
-        spent: spentTotal.toString(),
-        hasEntry: !!currentEntry
-      }
-    })
-
-    return NextResponse.json(formatted)
-  } catch (error) {
-    console.error('Error fetching budget data:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch budget data' },
-      { status: 500 }
-    )
-  }
+    ),
+    (te) => toResponse(te)
+  )
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { month, year, entries } = body
+  return pipe(
+    TE.tryCatch(
+      async () => await request.json(),
+      () => ValidationError('Failed to parse request body', [])
+    ),
+    TE.chain((body) => TE.fromEither(parseBody(saveBudgetEntriesBody)(body))),
+    TE.chain((validated) =>
+      tryCatchDb(
+        async () => {
+          try {
+            return await prisma.$transaction(async (tx) => {
+              const results = []
 
-    if (!month || !year) {
-      return NextResponse.json(
-        { error: 'Month and year are required' },
-        { status: 400 }
-      )
-    }
+              for (const entry of validated.entries) {
+                const { categoryId, budgeted } = entry
 
-    if (!Array.isArray(entries) || entries.length === 0) {
-      return NextResponse.json(
-        { error: 'Entries must be a non-empty array' },
-        { status: 400 }
-      )
-    }
+                if (!categoryId) {
+                  throw new Error('Category ID is required for all entries')
+                }
 
-    // Use a transaction to ensure all updates succeed or fail together
-    const result = await prisma.$transaction(async (tx) => {
-      const results = []
+                const existing = await tx.budgetEntry.findUnique({
+                  where: {
+                    categoryId_month_year: {
+                      categoryId,
+                      month: validated.month,
+                      year: validated.year
+                    }
+                  }
+                })
 
-      for (const entry of entries) {
-        const { categoryId, budgeted } = entry
+                const data = {
+                  budgeted: parseFloat(budgeted.toString()) || 0,
+                }
 
-        if (!categoryId) {
-          throw new Error('Category ID is required for all entries')
-        }
+                if (existing) {
+                  const updated = await tx.budgetEntry.update({
+                    where: { id: existing.id },
+                    data
+                  })
+                  results.push(updated)
+                } else {
+                  const created = await tx.budgetEntry.create({
+                    data: {
+                      categoryId,
+                      month: validated.month,
+                      year: validated.year,
+                      ...data
+                    }
+                  })
+                  results.push(created)
+                }
+              }
 
-        const existing = await tx.budgetEntry.findUnique({
-          where: {
-            categoryId_month_year: {
-              categoryId,
-              month,
-              year
+              return results
+            })
+          } catch (error) {
+            if (error instanceof Error && error.message.includes('Category ID is required')) {
+              throw ValidationError('Category ID is required for all entries', [{ path: 'entries', message: error.message }])
             }
+            throw error
           }
-        })
-
-        const data = {
-          budgeted: parseFloat(budgeted) || 0,
-          // spent is no longer stored here as it is computed from transactions
+        },
+        (error) => {
+          if (error instanceof Error && error.message.includes('Category ID is required')) {
+            return ValidationError('Category ID is required for all entries', [{ path: 'entries', message: error.message }])
+          }
+          return DatabaseError('Failed to save budget entries', error)
         }
-
-        if (existing) {
-          // Update existing entry
-          const updated = await tx.budgetEntry.update({
-            where: { id: existing.id },
-            data
-          })
-          results.push(updated)
-        } else {
-          // Create new entry
-          const created = await tx.budgetEntry.create({
-            data: {
-              categoryId,
-              month,
-              year,
-              ...data
-            }
-          })
-          results.push(created)
-        }
-      }
-
-      return results
-    })
-
-    return NextResponse.json({ 
-      success: true, 
-      count: result.length 
-    })
-  } catch (error) {
-    console.error('Error saving budget entries:', error)
-    return NextResponse.json(
-      { error: 'Failed to save budget entries' },
-      { status: 500 }
-    )
-  }
+      )
+    ),
+    TE.map((result) => ({ success: true, count: result.length })),
+    (te) => toResponse(te)
+  )
 }

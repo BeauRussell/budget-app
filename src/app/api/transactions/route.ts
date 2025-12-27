@@ -1,99 +1,88 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { pipe } from 'fp-ts/function'
+import * as TE from 'fp-ts/TaskEither'
+import * as E from 'fp-ts/Either'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseQuery, parseBody, tryCatchDb, toResponse } from '@/lib/result'
+import { getTransactionsQuery, createTransactionBody } from '@/lib/schemas'
 import { startOfMonth, endOfMonth } from 'date-fns'
+import { ValidationError } from '@/lib/errors'
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const month = parseInt(searchParams.get('month') || '')
-    const year = parseInt(searchParams.get('year') || '')
-    const categoryId = searchParams.get('categoryId')
-    const search = searchParams.get('search')
+  return pipe(
+    E.right(new URL(request.url)),
+    E.chain((url) => parseQuery(getTransactionsQuery)(url.searchParams)),
+    TE.fromEither,
+    TE.chain(({ month, year, categoryId, search }) =>
+      tryCatchDb(
+        async () => {
+          const startDate = startOfMonth(new Date(year, month - 1))
+          const endDate = endOfMonth(new Date(year, month - 1))
 
-    if (!month || !year) {
-      return NextResponse.json(
-        { error: 'Month and year are required' },
-        { status: 400 }
+          const where: {
+            date: { gte: Date; lte: Date };
+            categoryId?: string;
+            OR?: Array<{ vendor?: { contains: string; mode: 'insensitive' }; description?: { contains: string; mode: 'insensitive' } }>;
+          } = {
+            date: {
+              gte: startDate,
+              lte: endDate,
+            },
+          }
+
+          if (categoryId && categoryId !== 'all') {
+            where.categoryId = categoryId
+          }
+
+          if (search) {
+            where.OR = [
+              { vendor: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ]
+          }
+
+          const transactions = await prisma.transaction.findMany({
+            where,
+            include: {
+              category: true,
+            },
+            orderBy: {
+              date: 'desc',
+            },
+          })
+
+          return transactions
+        }
       )
-    }
-
-    const startDate = startOfMonth(new Date(year, month - 1))
-    const endDate = endOfMonth(new Date(year, month - 1))
-
-    const where: {
-      date: { gte: Date; lte: Date };
-      categoryId?: string;
-      OR?: Array<{ vendor?: { contains: string; mode: 'insensitive' }; description?: { contains: string; mode: 'insensitive' } }>;
-    } = {
-      date: {
-        gte: startDate,
-        lte: endDate,
-      },
-    }
-
-    if (categoryId && categoryId !== 'all') {
-      where.categoryId = categoryId
-    }
-
-    if (search) {
-      where.OR = [
-        { vendor: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-      ]
-    }
-
-    const transactions = await prisma.transaction.findMany({
-      where,
-      include: {
-        category: true,
-      },
-      orderBy: {
-        date: 'desc',
-      },
-    })
-
-    return NextResponse.json(transactions)
-  } catch (error) {
-    console.error('Error fetching transactions:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch transactions' },
-      { status: 500 }
-    )
-  }
+    ),
+    (te) => toResponse(te)
+  )
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { date, amount, vendor, description, categoryId, isRecurring } = body
-
-    if (!date || !amount || !categoryId) {
-      return NextResponse.json(
-        { error: 'Date, amount, and category are required' },
-        { status: 400 }
+  return pipe(
+    TE.tryCatch(
+      async () => await request.json(),
+      () => ValidationError('Failed to parse request body', [])
+    ),
+    TE.chain((body) => TE.fromEither(parseBody(createTransactionBody)(body))),
+    TE.chain((validated) =>
+      tryCatchDb(
+        () => prisma.transaction.create({
+          data: {
+            date: new Date(validated.date),
+            amount: parseFloat(validated.amount.toString()),
+            vendor: validated.vendor,
+            description: validated.description,
+            categoryId: validated.categoryId,
+            isRecurring: validated.isRecurring || false,
+          },
+          include: {
+            category: true,
+          },
+        })
       )
-    }
-
-    const transaction = await prisma.transaction.create({
-      data: {
-        date: new Date(date),
-        amount: parseFloat(amount),
-        vendor: vendor || null,
-        description: description || null,
-        categoryId,
-        isRecurring: !!isRecurring,
-      },
-      include: {
-        category: true,
-      },
-    })
-
-    return NextResponse.json(transaction)
-  } catch (error) {
-    console.error('Error creating transaction:', error)
-    return NextResponse.json(
-      { error: 'Failed to create transaction' },
-      { status: 500 }
-    )
-  }
+    ),
+    (te) => toResponse(te, 201)
+  )
 }
