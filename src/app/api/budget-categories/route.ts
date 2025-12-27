@@ -1,79 +1,76 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { pipe } from 'fp-ts/function'
+import * as TE from 'fp-ts/TaskEither'
+import * as E from 'fp-ts/Either'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseJsonBody, parseBody, tryCatchDb, toResponse } from '@/lib/result'
+import { createBudgetCategoryBody } from '@/lib/schemas'
+import { ConflictError, DatabaseError } from '@/lib/errors'
 
 export async function GET() {
-  try {
-    const categories = await prisma.budgetCategory.findMany({
-      where: { isActive: true },
-      orderBy: [
-        { sortOrder: 'asc' },
-        { name: 'asc' }
-      ],
-      include: {
-        _count: {
-          select: { entries: true }
+  return pipe(
+    tryCatchDb(
+      () => prisma.budgetCategory.findMany({
+        where: { isActive: true },
+        orderBy: [
+          { sortOrder: 'asc' },
+          { name: 'asc' }
+        ],
+        include: {
+          _count: {
+            select: { entries: true }
+          }
         }
-      }
-    })
-
-    return NextResponse.json(categories)
-  } catch (error) {
-    console.error('Error fetching budget categories:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch budget categories' },
-      { status: 500 }
-    )
-  }
+      })
+    ),
+    (te) => toResponse(te)
+  )
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { name, type } = body
-
-    if (!name || name.trim() === '') {
-      return NextResponse.json(
-        { error: 'Name is required' },
-        { status: 400 }
+  return pipe(
+    parseJsonBody(request),
+    TE.chain((body) => TE.fromEither(parseBody(createBudgetCategoryBody)(body))),
+    TE.chain((validated) =>
+      pipe(
+        E.tryCatch(
+          async () => {
+            const maxSortOrder = await prisma.budgetCategory.findFirst({
+              orderBy: { sortOrder: 'desc' },
+              select: { sortOrder: true }
+            })
+            return (maxSortOrder?.sortOrder || 0) + 1
+          },
+          () => DatabaseError('Failed to get max sort order', undefined)
+        ),
+        TE.fromEither,
+        TE.chain((sortOrder) =>
+          tryCatchDb(
+            async () => {
+              const sortOrderValue = await sortOrder
+              return prisma.budgetCategory.create({
+                data: {
+                  name: validated.name.trim(),
+                  type: validated.type,
+                  sortOrder: sortOrderValue
+                },
+                include: {
+                  _count: {
+                    select: { entries: true }
+                  }
+                }
+              })
+            },
+            (error) => {
+              if (error instanceof Error && error.message.includes('Unique constraint')) {
+                return ConflictError('Category name already exists', 'BudgetCategory')
+              }
+              return DatabaseError('Failed to create budget category', error)
+            }
+          )
+        )
       )
-    }
-
-    const validTypes = ['NEED', 'WANT', 'SAVING']
-    const categoryType = type && validTypes.includes(type) ? type : 'WANT'
-
-    // Get the max sort order
-    const maxSortOrder = await prisma.budgetCategory.findFirst({
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true }
-    })
-
-    const category = await prisma.budgetCategory.create({
-      data: {
-        name: name.trim(),
-        type: categoryType,
-        sortOrder: (maxSortOrder?.sortOrder || 0) + 1
-      },
-      include: {
-        _count: {
-          select: { entries: true }
-        }
-      }
-    })
-
-    return NextResponse.json(category, { status: 201 })
-  } catch (error) {
-    console.error('Error creating budget category:', error)
-    
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      return NextResponse.json(
-        { error: 'Category name already exists' },
-        { status: 409 }
-      )
-    }
-
-    return NextResponse.json(
-      { error: 'Failed to create budget category' },
-      { status: 500 }
-    )
-  }
+    ),
+    (te) => toResponse(te, 201)
+  )
 }

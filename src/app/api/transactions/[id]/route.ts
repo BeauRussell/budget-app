@@ -1,94 +1,112 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { pipe } from 'fp-ts/function'
+import * as TE from 'fp-ts/TaskEither'
+import * as E from 'fp-ts/Either'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseBody, tryCatchDb, toResponse, requireId } from '@/lib/result'
+import { updateTransactionBody } from '@/lib/schemas'
+import { NotFoundError, ValidationError } from '@/lib/errors'
 
 interface RouteParams {
   params: Promise<{ id: string }>
 }
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: RouteParams
 ) {
-  try {
-    const { id } = await params
-    const transaction = await prisma.transaction.findUnique({
-      where: { id },
-      include: { category: true }
-    })
+  const { id } = await params
 
-    if (!transaction) {
-      return NextResponse.json(
-        { error: 'Transaction not found' },
-        { status: 404 }
+  return pipe(
+    requireId({ id }),
+    TE.fromEither,
+    TE.chain((id) =>
+      tryCatchDb(
+        () => prisma.transaction.findUnique({
+          where: { id },
+          include: { category: true }
+        })
       )
-    }
-
-    return NextResponse.json(transaction)
-  } catch (error) {
-    console.error('Error fetching transaction:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch transaction' },
-      { status: 500 }
-    )
-  }
+    ),
+    TE.chain((transaction) =>
+      transaction
+        ? TE.right(transaction)
+        : TE.left(NotFoundError('Transaction', id))
+    ),
+    (te) => toResponse(te)
+  )
 }
 
 export async function PUT(
   request: NextRequest,
   { params }: RouteParams
 ) {
-  try {
-    const { id } = await params
-    const body = await request.json()
-    const { date, amount, vendor, description, categoryId, isRecurring } = body
+  const { id } = await params
 
-    const updateData: {
-      date?: Date;
-      amount?: number;
-      vendor?: string | null;
-      description?: string | null;
-      categoryId?: string;
-      isRecurring?: boolean;
-    } = {}
-    if (date) updateData.date = new Date(date)
-    if (amount !== undefined) updateData.amount = parseFloat(amount)
-    if (vendor !== undefined) updateData.vendor = vendor
-    if (description !== undefined) updateData.description = description
-    if (categoryId) updateData.categoryId = categoryId
-    if (isRecurring !== undefined) updateData.isRecurring = !!isRecurring
+  return pipe(
+    requireId({ id }),
+    E.chain((id) =>
+      E.right({ id, request })
+    ),
+    TE.fromEither,
+    TE.chain(({ id, request }) =>
+      pipe(
+        TE.tryCatch(
+          async () => await request.json(),
+          () => ValidationError('Failed to parse request body', [])
+        ),
+        TE.chain((body) => TE.fromEither(parseBody(updateTransactionBody)(body))),
+        TE.map((validated) => ({ id, validated }))
+      )
+    ),
+    TE.chain(({ id, validated }) =>
+      tryCatchDb(
+        () => {
+          const updateData: {
+            date?: Date;
+            amount?: number;
+            vendor?: string | null;
+            description?: string | null;
+            categoryId?: string;
+            isRecurring?: boolean;
+          } = {}
 
-    const transaction = await prisma.transaction.update({
-      where: { id },
-      data: updateData,
-      include: { category: true }
-    })
+          if (validated.date !== undefined) updateData.date = new Date(validated.date)
+          if (validated.amount !== undefined) updateData.amount = parseFloat(validated.amount.toString())
+          if (validated.vendor !== undefined) updateData.vendor = validated.vendor
+          if (validated.description !== undefined) updateData.description = validated.description
+          if (validated.categoryId !== undefined) updateData.categoryId = validated.categoryId
+          if (validated.isRecurring !== undefined) updateData.isRecurring = validated.isRecurring
 
-    return NextResponse.json(transaction)
-  } catch (error) {
-    console.error('Error updating transaction:', error)
-    return NextResponse.json(
-      { error: 'Failed to update transaction' },
-      { status: 500 }
-    )
-  }
+          return prisma.transaction.update({
+            where: { id },
+            data: updateData,
+            include: { category: true }
+          })
+        }
+      )
+    ),
+    (te) => toResponse(te)
+  )
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: RouteParams
 ) {
-  try {
-    const { id } = await params
-    await prisma.transaction.delete({
-      where: { id }
-    })
+  const { id } = await params
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Error deleting transaction:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete transaction' },
-      { status: 500 }
-    )
-  }
+  return pipe(
+    requireId({ id }),
+    TE.fromEither,
+    TE.chain((id) =>
+      tryCatchDb(
+        () => prisma.transaction.delete({
+          where: { id }
+        })
+      )
+    ),
+    TE.map(() => ({ success: true })),
+    (te) => toResponse(te)
+  )
 }

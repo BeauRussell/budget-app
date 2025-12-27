@@ -1,86 +1,68 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { pipe } from 'fp-ts/function'
+import * as TE from 'fp-ts/TaskEither'
+import * as E from 'fp-ts/Either'
+import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { parseQuery, parseBody, tryCatchDb, toResponse } from '@/lib/result'
+import { getIncomeQuery, saveIncomeBody } from '@/lib/schemas'
+import { ValidationError } from '@/lib/errors'
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const month = parseInt(searchParams.get('month') || '')
-    const year = parseInt(searchParams.get('year') || '')
-
-    if (!month || !year) {
-      return NextResponse.json(
-        { error: 'Month and year are required' },
-        { status: 400 }
+  return pipe(
+    E.right(new URL(request.url)),
+    E.chain((url) => parseQuery(getIncomeQuery)(url.searchParams)),
+    TE.fromEither,
+    TE.chain(({ month, year }) =>
+      tryCatchDb(
+        () => prisma.monthlyIncome.findUnique({
+          where: {
+            month_year: { month, year }
+          }
+        })
       )
-    }
-
-    const income = await prisma.monthlyIncome.findUnique({
-      where: {
-        month_year: { month, year }
-      }
-    })
-
-    return NextResponse.json(income || { amount: null, note: null })
-  } catch (error) {
-    console.error('Error fetching income:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch income' },
-      { status: 500 }
-    )
-  }
+    ),
+    TE.map((income) => income || { amount: null, note: null }),
+    (te) => toResponse(te)
+  )
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { month, year, amount, note } = body
+  return pipe(
+    TE.tryCatch(
+      async () => await request.json(),
+      () => ValidationError('Failed to parse request body', [])
+    ),
+    TE.chain((body) => TE.fromEither(parseBody(saveIncomeBody)(body))),
+    TE.chain((validated) =>
+      tryCatchDb(
+        async () => {
+          const existing = await prisma.monthlyIncome.findUnique({
+            where: {
+              month_year: { month: validated.month, year: validated.year }
+            }
+          })
 
-    if (!month || !year) {
-      return NextResponse.json(
-        { error: 'Month and year are required' },
-        { status: 400 }
-      )
-    }
-
-    if (amount === undefined || amount === null) {
-      return NextResponse.json(
-        { error: 'Amount is required' },
-        { status: 400 }
-      )
-    }
-
-    const existing = await prisma.monthlyIncome.findUnique({
-      where: {
-        month_year: { month, year }
-      }
-    })
-
-    let income
-    if (existing) {
-      income = await prisma.monthlyIncome.update({
-        where: { id: existing.id },
-        data: {
-          amount: parseFloat(amount),
-          note: note || null
+          if (existing) {
+            return await prisma.monthlyIncome.update({
+              where: { id: existing.id },
+              data: {
+                amount: parseFloat(validated.amount.toString()),
+                note: validated.note || null
+              }
+            })
+          } else {
+            return await prisma.monthlyIncome.create({
+              data: {
+                month: validated.month,
+                year: validated.year,
+                amount: parseFloat(validated.amount.toString()),
+                note: validated.note || null
+              }
+            })
+          }
         }
-      })
-    } else {
-      income = await prisma.monthlyIncome.create({
-        data: {
-          month,
-          year,
-          amount: parseFloat(amount),
-          note: note || null
-        }
-      })
-    }
-
-    return NextResponse.json(income)
-  } catch (error) {
-    console.error('Error saving income:', error)
-    return NextResponse.json(
-      { error: 'Failed to save income' },
-      { status: 500 }
-    )
-  }
+      )
+    ),
+    (te) => toResponse(te)
+  )
 }
