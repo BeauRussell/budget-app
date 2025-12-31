@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseQuery, tryCatchDb, toResponse } from '@/lib/result'
 import { optionalYearQuery } from '@/lib/schemas'
+import { startOfMonth, endOfMonth } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   return pipe(
@@ -27,6 +28,18 @@ export async function GET(request: NextRequest) {
             where: { year: yearValue }
           })
 
+          const startDate = startOfMonth(new Date(yearValue, 0))
+          const endDate = endOfMonth(new Date(yearValue, 11))
+
+          const transactions = await prisma.transaction.findMany({
+            where: {
+              date: {
+                gte: startDate,
+                lte: endDate
+              }
+            }
+          })
+
           const monthlyData: Record<number, { budgeted: number; spent: number; income: number }> = {}
 
           for (let month = 1; month <= 12; month++) {
@@ -35,7 +48,11 @@ export async function GET(request: NextRequest) {
 
           for (const entry of entries) {
             monthlyData[entry.month].budgeted += parseFloat(entry.budgeted.toString())
-            monthlyData[entry.month].spent += parseFloat(entry.spent.toString())
+          }
+
+          for (const transaction of transactions) {
+            const month = transaction.date.getMonth() + 1
+            monthlyData[month].spent += parseFloat(transaction.amount.toString())
           }
 
           for (const income of incomes) {
