@@ -79,7 +79,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
             prisma.budgetEntry.count({
               where: { categoryId: id }
             }),
-            (prisma as any).transaction.count({
+            prisma.transaction.count({
               where: { categoryId: id }
             })
           ])
