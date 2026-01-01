@@ -12,7 +12,6 @@ import { format } from "date-fns"
 import { RefreshCw } from "lucide-react"
 import { useMonthNavigation } from "@/hooks/use-month-navigation"
 import { MonthNavigator } from "@/components/layout/month-navigator"
-import { YearNavigator } from "@/components/layout/year-navigator"
 import { toast } from "sonner"
 
 interface AccountEntry {
@@ -27,6 +26,7 @@ interface AccountEntry {
 
 interface TrendData {
   month: string
+  year: number
   monthNum: number
   assets: number
   debts: number
@@ -40,13 +40,27 @@ interface SummaryData {
 
 export default function NetWorthEntryPage() {
   const { currentMonth, goToMonth } = useMonthNavigation()
-  const [trendsYear, setTrendsYear] = useState(currentMonth.getFullYear())
+  const [trendsEndMonth, setTrendsEndMonth] = useState<Date>(currentMonth)
   const [activeTab, setActiveTab] = useState("entry")
   const [accounts, setAccounts] = useState<AccountEntry[]>([])
   const [trendData, setTrendData] = useState<TrendData[]>([])
   const [summaryData, setSummaryData] = useState<SummaryData>({ monthsWithData: [], years: [] })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const tabParam = urlParams.get('tab')
+    if (tabParam === 'trends') {
+      setActiveTab('trends')
+      const monthParam = urlParams.get('month')
+      const yearParam = urlParams.get('year')
+      if (monthParam && yearParam) {
+        const newDate = new Date(parseInt(yearParam), parseInt(monthParam) - 1, 1)
+        setTrendsEndMonth(newDate)
+      }
+    }
+  }, [])
 
   const fetchSummaryData = useCallback(async () => {
     try {
@@ -81,7 +95,9 @@ export default function NetWorthEntryPage() {
 
   const fetchTrendData = useCallback(async () => {
     try {
-      const response = await fetch(`/api/net-worth/trends?year=${trendsYear}`)
+      const month = trendsEndMonth.getMonth() + 1
+      const year = trendsEndMonth.getFullYear()
+      const response = await fetch(`/api/net-worth/trends?month=${month}&year=${year}`)
       if (response.ok) {
         const data = await response.json()
         setTrendData(data)
@@ -90,7 +106,7 @@ export default function NetWorthEntryPage() {
       console.error('Error fetching trend data:', error)
       toast.error('Failed to load trend data')
     }
-  }, [trendsYear])
+  }, [trendsEndMonth])
 
   useEffect(() => {
     fetchSummaryData()
@@ -152,9 +168,15 @@ export default function NetWorthEntryPage() {
   }
 
   const handleMonthClick = (monthNum: number) => {
-    const newDate = new Date(trendsYear, monthNum - 1, 1)
+    const dataPoint = trendData.find(d => d.monthNum === monthNum)
+    const year = dataPoint ? dataPoint.year : trendsEndMonth.getFullYear()
+    const newDate = new Date(year, monthNum - 1, 1)
     goToMonth(newDate)
     setActiveTab("entry")
+  }
+
+  const goToTrendsMonth = (date: Date) => {
+    setTrendsEndMonth(date)
   }
 
   const assets = accounts.filter(a => a.type === 'ASSET').sort((a,b) => a.category.localeCompare(b.category));
@@ -191,16 +213,16 @@ export default function NetWorthEntryPage() {
         </div>
         <div className="flex items-center gap-4">
           {activeTab === "entry" ? (
-             <MonthNavigator 
-             currentMonth={currentMonth} 
-             onMonthChange={goToMonth} 
+             <MonthNavigator
+             currentMonth={currentMonth}
+             onMonthChange={goToMonth}
              monthsWithData={summaryData.monthsWithData}
            />
           ) : (
-            <YearNavigator 
-              currentYear={trendsYear} 
-              onYearChange={setTrendsYear} 
-              availableYears={summaryData.years}
+            <MonthNavigator
+              currentMonth={trendsEndMonth}
+              onMonthChange={goToTrendsMonth}
+              monthsWithData={summaryData.monthsWithData}
             />
           )}
           <Button
@@ -327,19 +349,19 @@ export default function NetWorthEntryPage() {
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Net Worth Trend - {trendsYear}</CardTitle>
+                <CardTitle>Net Worth Trend - 12 Months Ending {format(trendsEndMonth, 'MMMM yyyy')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {trendData.some(d => d.netWorth !== 0) ? (
-                  <NetWorthChart 
-                    data={trendData} 
-                    onMonthClick={handleMonthClick} 
-                    showAssets={false} 
-                    showDebts={false} 
+                  <NetWorthChart
+                    data={trendData}
+                    onMonthClick={handleMonthClick}
+                    showAssets={false}
+                    showDebts={false}
                   />
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data yet for {trendsYear}. Add account values to see trends.
+                    No data yet. Add account values to see trends.
                   </div>
                 )}
               </CardContent>
@@ -347,18 +369,18 @@ export default function NetWorthEntryPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Assets & Debts Trend - {trendsYear}</CardTitle>
+                <CardTitle>Assets & Debts Trend - 12 Months Ending {format(trendsEndMonth, 'MMMM yyyy')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {trendData.some(d => d.netWorth !== 0) ? (
-                  <NetWorthChart 
-                    data={trendData} 
-                    onMonthClick={handleMonthClick} 
-                    showNetWorth={false} 
+                  <NetWorthChart
+                    data={trendData}
+                    onMonthClick={handleMonthClick}
+                    showNetWorth={false}
                   />
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No data yet for {trendsYear}. Add account values to see trends.
+                    No data yet. Add account values to see trends.
                   </div>
                 )}
               </CardContent>

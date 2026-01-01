@@ -5,31 +5,38 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { format } from "date-fns"
 import { TrendingUp, TrendingDown, PiggyBank, DollarSign, CreditCard } from "lucide-react"
 import Link from "next/link"
+import { YearOverYearChart } from "@/components/charts/year-over-year-chart"
 
 interface DashboardData {
   netWorth: {
     totalAssets: number
     totalDebts: number
     netWorth: number
-  }
-    budget: {
-      income: number
-      totalBudgeted: number
-      totalSpent: number
-      plannedSavings: number
-      actualSavings: number
-      savingsRate: number
-      breakdown?: {
-        needs: number
-        wants: number
-        savings: number
-      }
+    yearOverYear: {
+      previousNetWorth: number
+      change: number
+      percentageChange: number
     }
   }
+  budget: {
+    income: number
+    totalBudgeted: number
+    totalSpent: number
+    plannedSavings: number
+    actualSavings: number
+    savingsRate: number
+    breakdown?: {
+      needs: number
+      wants: number
+      savings: number
+    }
+  }
+}
 
 export default function Dashboard() {
   const currentMonth = useMemo(() => new Date(), [])
   const [data, setData] = useState<DashboardData | null>(null)
+  const [yearOverYearData, setYearOverYearData] = useState<{ year: number; netWorth: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchDashboardData = useCallback(async () => {
@@ -37,10 +44,19 @@ export default function Dashboard() {
       const month = currentMonth.getMonth() + 1
       const year = currentMonth.getFullYear()
       
-      const response = await fetch(`/api/dashboard?month=${month}&year=${year}`)
-      if (response.ok) {
-        const data = await response.json()
+      const [dashboardResponse, yoyResponse] = await Promise.all([
+        fetch(`/api/dashboard?month=${month}&year=${year}`),
+        fetch(`/api/net-worth/year-over-year?month=${month}`)
+      ])
+      
+      if (dashboardResponse.ok) {
+        const data = await dashboardResponse.json()
         setData(data)
+      }
+      
+      if (yoyResponse.ok) {
+        const yoyData = await yoyResponse.json()
+        setYearOverYearData(yoyData)
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -52,6 +68,19 @@ export default function Dashboard() {
   useEffect(() => {
     fetchDashboardData()
   }, [fetchDashboardData])
+
+  const handleYearClick = (year: number) => {
+    window.location.href = `/net-worth?month=12&year=${year}`
+  }
+
+  const formatCurrency = (value: number) => {
+    const sign = value >= 0 ? '+' : ''
+    return `${sign}$${value.toLocaleString()}`
+  }
+
+  const yoyChange = data?.netWorth.yearOverYear.change || 0
+  const yoyPercentageChange = data?.netWorth.yearOverYear.percentageChange || 0
+  const previousNetWorth = data?.netWorth.yearOverYear.previousNetWorth || 0
 
   if (loading) {
     return <div>Loading...</div>
@@ -76,9 +105,23 @@ export default function Dashboard() {
             <div className={`text-2xl font-bold ${(data?.netWorth.netWorth || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
               ${(data?.netWorth.netWorth || 0).toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">
-              <Link href="/net-worth" className="hover:underline">View details</Link>
-            </p>
+            {yoyChange !== 0 || previousNetWorth !== 0 ? (
+              <div className="flex items-center gap-1 text-xs">
+                {yoyChange >= 0 ? (
+                  <TrendingUp className={`h-3 w-3 ${yoyChange >= 0 ? 'text-green-700' : 'text-red-700'}`} />
+                ) : (
+                  <TrendingDown className={`h-3 w-3 ${yoyChange >= 0 ? 'text-green-700' : 'text-red-700'}`} />
+                )}
+                <span className={yoyChange >= 0 ? 'text-green-700' : 'text-red-700'}>
+                  {formatCurrency(yoyChange)} ({yoyPercentageChange.toFixed(1)}%)
+                </span>
+                <span className="text-muted-foreground"> from last year</span>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                <Link href="/net-worth" className="hover:underline">View details</Link>
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -128,6 +171,23 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {yearOverYearData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Net Worth by Year ({format(currentMonth, 'MMMM')} Comparison)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <YearOverYearChart
+              data={yearOverYearData}
+              month={currentMonth.getMonth() + 1}
+              onYearClick={handleYearClick}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -159,6 +219,18 @@ export default function Dashboard() {
                   ${(data?.netWorth.netWorth || 0).toLocaleString()}
                 </span>
               </div>
+              {(yoyChange !== 0 || previousNetWorth !== 0) && (
+                <>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>Last Year ({format(new Date(currentMonth.getFullYear() - 1, currentMonth.getMonth()), 'MMMM yyyy')})</span>
+                    <span>${previousNetWorth.toLocaleString()}</span>
+                  </div>
+                  <div className={`flex items-center justify-between text-sm ${yoyChange >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    <span className="font-medium">Year Over Year Change</span>
+                    <span className="font-semibold">{formatCurrency(yoyChange)} ({yoyPercentageChange.toFixed(1)}%)</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-4 pt-4 border-t">
               <Link href="/net-worth" className="text-sm text-blue-600 hover:underline">

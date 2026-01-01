@@ -41,6 +41,34 @@ export async function GET(request: NextRequest) {
 
           const netWorth = totalAssets - totalDebts
 
+          const previousYearAccounts = await prisma.account.findMany({
+            where: { isActive: true },
+            include: {
+              snapshots: {
+                where: { month, year: year - 1 },
+                take: 1
+              }
+            }
+          })
+
+          const previousTotalAssets = previousYearAccounts
+            .filter(a => a.type === 'ASSET')
+            .reduce((sum, a) => {
+              const value = a.snapshots[0]?.value
+              return sum + (value ? parseFloat(value.toString()) : 0)
+            }, 0)
+
+          const previousTotalDebts = previousYearAccounts
+            .filter(a => a.type === 'DEBT')
+            .reduce((sum, a) => {
+              const value = a.snapshots[0]?.value
+              return sum + (value ? parseFloat(value.toString()) : 0)
+            }, 0)
+
+          const previousNetWorth = previousTotalAssets - previousTotalDebts
+          const yoyChange = netWorth - previousNetWorth
+          const yoyPercentageChange = previousNetWorth !== 0 ? (yoyChange / previousNetWorth) * 100 : 0
+
           const budgetEntries = await prisma.budgetEntry.findMany({
             where: { month, year },
             include: {
@@ -104,7 +132,12 @@ export async function GET(request: NextRequest) {
             netWorth: {
               totalAssets,
               totalDebts,
-              netWorth
+              netWorth,
+              yearOverYear: {
+                previousNetWorth,
+                change: yoyChange,
+                percentageChange: yoyPercentageChange
+              }
             },
             budget: {
               income: incomeAmount,
