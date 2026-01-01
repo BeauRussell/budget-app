@@ -1,9 +1,8 @@
 import { pipe } from 'fp-ts/function'
-import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { tryCatchDb, toResponse } from '@/lib/result'
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   return pipe(
     tryCatchDb(
       async () => {

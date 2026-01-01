@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
           const startDate = startOfMonth(new Date(year, month - 1))
           const endDate = endOfMonth(new Date(year, month - 1))
 
-          const transactionTotals = await (prisma as any).transaction.groupBy({
+          const transactionTotals = await prisma.transaction.groupBy({
             by: ['categoryId'],
             where: {
               date: {
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
           const formatted = categories.map(category => {
             const currentEntry = category.entries[0]
             const prevEntry = prevEntries.find(e => e.categoryId === category.id)
-            const spentTotal = transactionTotals.find((t: any) => t.categoryId === category.id)?._sum?.amount || 0
+            const spentTotal = transactionTotals.find(t => t.categoryId === category.id)?._sum?.amount || 0
 
             return {
               id: category.id,
