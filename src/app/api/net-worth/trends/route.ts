@@ -4,46 +4,61 @@ import * as E from 'fp-ts/Either'
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseQuery, tryCatchDb, toResponse } from '@/lib/result'
-import { optionalYearQuery } from '@/lib/schemas'
+import { monthYearQuery } from '@/lib/schemas'
 
 export async function GET(request: NextRequest) {
   return pipe(
     E.right(new URL(request.url)),
-    E.chain((url) => parseQuery(optionalYearQuery)(url.searchParams)),
+    E.chain((url) => parseQuery(monthYearQuery)(url.searchParams)),
     TE.fromEither,
-    TE.chain(({ year }) =>
+    TE.chain(({ month, year }) =>
       tryCatchDb(
         async () => {
-          const yearValue = year || new Date().getFullYear()
+          const endDate = new Date(year, month - 1, 1)
+          const startDate = new Date(year, month - 13, 1)
 
           const snapshots = await prisma.netWorthSnapshot.findMany({
-            where: { year: yearValue },
+            where: {
+              OR: [
+                { year: startDate.getFullYear(), month: { gte: startDate.getMonth() + 1 } },
+                { year: { gt: startDate.getFullYear(), lt: endDate.getFullYear() } },
+                { year: endDate.getFullYear(), month: { lte: endDate.getMonth() + 1 } }
+              ]
+            },
             include: {
               account: true
             },
             orderBy: [
+              { year: 'asc' },
               { month: 'asc' }
             ]
           })
 
-          const monthlyData: Record<number, { assets: number; debts: number }> = {}
+          const monthlyData: Map<string, { assets: number; debts: number; monthNum: number; date: Date }> = new Map()
 
-          for (let month =1; month <= 12; month++) {
-            monthlyData[month] = { assets: 0, debts: 0 }
+          for (let i = 0; i < 12; i++) {
+            const date = new Date(year, month - 13 + i, 1)
+            const key = `${date.getFullYear()}-${date.getMonth() + 1}`
+            monthlyData.set(key, { assets: 0, debts: 0, monthNum: date.getMonth() + 1, date })
           }
 
           for (const snapshot of snapshots) {
+            const key = `${snapshot.year}-${snapshot.month}`
+            const data = monthlyData.get(key)
+            if (!data) continue
+
             const value = parseFloat(snapshot.value.toString())
             if (snapshot.account.type === 'ASSET') {
-              monthlyData[snapshot.month].assets += value
+              data.assets += value
             } else {
-              monthlyData[snapshot.month].debts += value
+              data.debts += value
             }
           }
 
-          const chartData = Object.entries(monthlyData).map(([month, data]) => ({
-            month: getMonthName(parseInt(month)),
-            monthNum: parseInt(month),
+          const chartData = Array.from(monthlyData.values()).map(data => ({
+            month: `${getMonthName(data.monthNum)} ${data.date.getFullYear()}`,
+            year: data.date.getFullYear(),
+            monthNum: data.monthNum,
             assets: data.assets,
             debts: data.debts,
             netWorth: data.assets - data.debts
